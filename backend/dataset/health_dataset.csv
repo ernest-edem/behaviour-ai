@@ -1,0 +1,6 @@
+sleep_hours,exercise_minutes,water_intake_liters,stress_level,screen_time_hours,smoker,alcohol_use,diet_quality,fruits_per_day,vegetables_per_day,disease
+8,60,3,2,3,0,0,9,4,5,healthy
+4,10,1,9,10,1,1,2,0,1,cardiovascular
+5,15,1.5,8,8,1,0,3,1,1,diabetes
+7,45,2.5,3,4,0,0,8,3,4,healthy
+6,20,2,7,7,0,1,4,1,2,stress_disorder
