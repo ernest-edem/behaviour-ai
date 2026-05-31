@@ -1,56 +1,132 @@
+from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
-from datetime import datetime, timedelta
 from jose import jwt, JWTError
+from app.core.config import settings
 
-# =========================
+# ==========================================
 # CONFIG
-# =========================
+# ==========================================
 
-SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_KEY"
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 
-# =========================
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+# ==========================================
 # PASSWORD HASHING
-# =========================
+# ==========================================
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
 
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(
+    plain_password: str,
+    hashed_password: str
+) -> bool:
+    return pwd_context.verify(
+        plain_password,
+        hashed_password
+    )
 
 
-# =========================
-# JWT TOKEN CREATION
-# =========================
+# ==========================================
+# ACCESS TOKEN
+# ==========================================
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+def create_access_token(
+    data: dict,
+    expires_delta: timedelta | None = None
+):
     to_encode = data.copy()
 
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = (
+        datetime.now(timezone.utc)
+        + (
+            expires_delta
+            or timedelta(
+                minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+        )
+    )
 
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "type": "access"
+    })
 
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
 
-    return encoded_jwt
+
+# ==========================================
+# REFRESH TOKEN
+# ==========================================
+
+def create_refresh_token(
+    data: dict
+):
+    to_encode = data.copy()
+
+    expire = (
+        datetime.now(timezone.utc)
+        + timedelta(
+            days=REFRESH_TOKEN_EXPIRE_DAYS
+        )
+    )
+
+    to_encode.update({
+        "exp": expire,
+        "type": "refresh"
+    })
+
+    return jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
 
 
-# =========================
-# JWT TOKEN VERIFICATION
-# =========================
+# ==========================================
+# TOKEN DECODE
+# ==========================================
 
-def decode_access_token(token: str):
+def decode_token(
+    token: str
+):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
         return payload
+
     except JWTError:
         return None
+
+
+# ==========================================
+# USER ID HELPER
+# ==========================================
+
+def get_user_id_from_token(
+    token: str
+):
+    payload = decode_token(token)
+
+    if not payload:
+        return None
+
+    return payload.get("user_id")
