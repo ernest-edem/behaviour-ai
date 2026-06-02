@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 
 from app.database.db import get_db
@@ -59,12 +59,10 @@ def register_user(
 # LOGIN
 # =====================================
 
-@router.post(
-    "/login",
-    response_model=Token
-)
+@router.post("/login")
 def login(
     credentials: UserLogin,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     result = login_user(
@@ -79,10 +77,27 @@ def login(
             detail="Invalid email or password"
         )
 
-    return {
-        "access_token": result["access_token"],
-        "token_type": result["token_type"]
-    }
+    response.set_cookie(
+        key="access_token",
+        value=f"Bearer {result['access_token']}",
+        httponly=True,
+        samesite="lax",
+        secure=False,  # Set to True in production if using HTTPS
+        max_age=3600 * 24 * 7 # 7 days
+    )
+
+    return {"message": "Successfully logged in"}
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        samesite="lax",
+        secure=False
+    )
+    return {"message": "Successfully logged out"}
+
 
 
 # =====================================

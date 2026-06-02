@@ -10,29 +10,35 @@ from app.models.prediction_symptom import PredictionSymptom
 from app.models.health_report import HealthReport
 from app.models.disease_risk_history import DiseaseRiskHistory
 from app.models.lifestyle_log import LifestyleLog
-from app.models.health_alert import HealthAlert
 
 from app.schemas.assessment import HealthAssessmentRequest
 
 from app.services.prediction_service import generate_prediction
-from app.services.prediction_history_service import get_user_prediction_history
-from app.services.alert_service import generate_alerts_from_prediction
+from app.services.prediction_history_service import (
+    get_user_prediction_history
+)
+from app.services.alert_service import (
+    generate_alerts_from_prediction
+)
 
 router = APIRouter(
     prefix="/predictions",
     tags=["Predictions"]
 )
 
-
 # =====================================
 # HISTORY API
 # =====================================
+
 @router.get("/history")
 def get_prediction_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    predictions = get_user_prediction_history(db, current_user.id)
+    predictions = get_user_prediction_history(
+        db,
+        current_user.id
+    )
 
     return {
         "history": predictions,
@@ -43,16 +49,23 @@ def get_prediction_history(
 # =====================================
 # ANALYZE API (MAIN ENGINE)
 # =====================================
+
 @router.post("/analyze")
 def analyze_health(
     payload: HealthAssessmentRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # =====================================
     # 1. AI Prediction
+    # =====================================
+
     result = generate_prediction(payload)
 
-    # 2. Lifestyle log
+    # =====================================
+    # 2. Lifestyle Log
+    # =====================================
+
     lifestyle = LifestyleLog(
         user_id=current_user.id,
         sleep_hours=payload.sleep_hours,
@@ -68,10 +81,14 @@ def analyze_health(
         lifestyle_score=result["health_score"],
         risk_score=result["risk_score"]
     )
+
     db.add(lifestyle)
     db.flush()
 
-    # 3. Prediction record
+    # =====================================
+    # 3. Prediction Record
+    # =====================================
+
     prediction = Prediction(
         user_id=current_user.id,
         predicted_disease=result["predicted_disease"],
@@ -81,20 +98,31 @@ def analyze_health(
         risk_level=result["risk_level"],
         urgency=result["urgency"],
         recommendation=result["recommendation"],
-        explanation="\n".join(result["explanation"]),
+        explanation="\n".join(
+            result["explanation"]
+        ),
         model_version="v1.0"
     )
+
     db.add(prediction)
     db.flush()
 
-    # 4. Symptoms
-    for symptom in payload.symptoms:
-        db.add(PredictionSymptom(
-            prediction_id=prediction.id,
-            symptom=symptom
-        ))
+    # =====================================
+    # 4. Prediction Symptoms
+    # =====================================
 
-    # 5. Health report
+    for symptom in payload.symptoms:
+        db.add(
+            PredictionSymptom(
+                prediction_id=prediction.id,
+                symptom=symptom
+            )
+        )
+
+    # =====================================
+    # 5. Health Report
+    # =====================================
+
     report = HealthReport(
         user_id=current_user.id,
         health_score=result["health_score"],
@@ -103,13 +131,19 @@ def analyze_health(
         predicted_disease=result["predicted_disease"],
         risk_level=result["risk_level"],
         urgency=result["urgency"],
-        summary="\n".join(result["explanation"]),
+        summary="\n".join(
+            result["explanation"]
+        ),
         recommendations=result["recommendation"],
         report_version="v1.0"
     )
+
     db.add(report)
 
-    # 6. Disease history
+    # =====================================
+    # 6. Disease Risk History
+    # =====================================
+
     history = DiseaseRiskHistory(
         user_id=current_user.id,
         disease_name=result["predicted_disease"],
@@ -117,9 +151,13 @@ def analyze_health(
         risk_level=result["risk_level"],
         ai_confidence=result["ai_confidence"]
     )
+
     db.add(history)
 
-    # 7. ALERT SYSTEM (SINGLE SOURCE OF TRUTH)
+    # =====================================
+    # 7. Alert Generation
+    # =====================================
+
     alerts = generate_alerts_from_prediction(
         user_id=current_user.id,
         result=result
@@ -128,7 +166,22 @@ def analyze_health(
     for alert in alerts:
         db.add(alert)
 
-    # 8. Commit EVERYTHING
+    # =====================================
+    # 8. Commit Everything
+    # =====================================
+
     db.commit()
 
-    return result
+    # Refresh prediction so ID and timestamps
+    # are available if needed later
+
+    db.refresh(prediction)
+
+    # =====================================
+    # 9. Return Result
+    # =====================================
+
+    return {
+        **result,
+        "prediction_id": prediction.id
+    }

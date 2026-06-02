@@ -1,12 +1,19 @@
 from app.models.health_alert import HealthAlert
 
 
-def generate_alerts_from_prediction(user_id, result):
+def generate_alerts_from_prediction(
+    user_id: int,
+    result: dict
+):
     alerts = []
 
     risk = result["risk_score"]
     health = result["health_score"]
     disease = result["predicted_disease"]
+
+    # =====================
+    # CRITICAL RISK
+    # =====================
 
     if risk >= 80:
         alerts.append(
@@ -21,6 +28,10 @@ def generate_alerts_from_prediction(user_id, result):
             )
         )
 
+    # =====================
+    # LOW HEALTH SCORE
+    # =====================
+
     if health < 40:
         alerts.append(
             HealthAlert(
@@ -34,7 +45,15 @@ def generate_alerts_from_prediction(user_id, result):
             )
         )
 
-    if disease in ["Diabetes", "Cardiovascular", "Hypertension"]:
+    # =====================
+    # HIGH-RISK DISEASES
+    # =====================
+
+    if disease in [
+        "Diabetes",
+        "Cardiovascular",
+        "Hypertension",
+    ]:
         alerts.append(
             HealthAlert(
                 user_id=user_id,

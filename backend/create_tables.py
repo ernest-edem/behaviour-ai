@@ -7,6 +7,7 @@ from app.models.lifestyle_log import LifestyleLog
 from app.models.symptom_log import SymptomLog
 from app.models.health_report import HealthReport
 from app.models.disease_risk_history import DiseaseRiskHistory
+from app.models.health_alert import HealthAlert
 
 Base.metadata.create_all(bind=engine)
 

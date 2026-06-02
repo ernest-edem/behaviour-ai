@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
+
 from passlib.context import CryptContext
 from jose import jwt, JWTError
+
 from app.core.config import settings
 
 # ==========================================
@@ -8,10 +10,11 @@ from app.core.config import settings
 # ==========================================
 
 SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = "HS256"
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+# 30 days refresh token
+REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 # ==========================================
 # PASSWORD HASHING
@@ -101,9 +104,7 @@ def create_refresh_token(
 # TOKEN DECODE
 # ==========================================
 
-def decode_token(
-    token: str
-):
+def decode_access_token(token: str):
     try:
         payload = jwt.decode(
             token,
@@ -117,6 +118,11 @@ def decode_token(
         return None
 
 
+# Backward compatibility
+def decode_token(token: str):
+    return decode_access_token(token)
+
+
 # ==========================================
 # USER ID HELPER
 # ==========================================
@@ -124,7 +130,7 @@ def decode_token(
 def get_user_id_from_token(
     token: str
 ):
-    payload = decode_token(token)
+    payload = decode_access_token(token)
 
     if not payload:
         return None

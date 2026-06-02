@@ -11,7 +11,7 @@ def generate_prediction(data):
     - Explainability layer
     """
 
-    risk_score = 0
+    raw_risk_score = 0
     explanations = []
 
     # =====================================
@@ -35,7 +35,7 @@ def generate_prediction(data):
     if getattr(data, "sleep_hours", None) is not None:
 
         if data.sleep_hours < 5:
-            risk_score += 20
+            raw_risk_score += 20
 
             disease_scores["Sleep Disorder"] += 40
             disease_scores["Hypertension"] += 10
@@ -45,7 +45,7 @@ def generate_prediction(data):
             )
 
         elif data.sleep_hours < 7:
-            risk_score += 10
+            raw_risk_score += 10
 
     # =====================================
     # STRESS ANALYSIS
@@ -54,7 +54,7 @@ def generate_prediction(data):
     if getattr(data, "stress_level", None) is not None:
 
         if data.stress_level >= 8:
-            risk_score += 20
+            raw_risk_score += 20
 
             disease_scores["Stress Related Disorder"] += 40
             disease_scores["Hypertension"] += 15
@@ -65,7 +65,7 @@ def generate_prediction(data):
             )
 
         elif data.stress_level >= 6:
-            risk_score += 10
+            raw_risk_score += 10
 
     # =====================================
     # PHYSICAL ACTIVITY
@@ -74,7 +74,7 @@ def generate_prediction(data):
     if getattr(data, "exercise_minutes", None) is not None:
 
         if data.exercise_minutes < 30:
-            risk_score += 15
+            raw_risk_score += 15
 
             disease_scores["Obesity"] += 20
             disease_scores["Cardiovascular Disease"] += 20
@@ -90,7 +90,7 @@ def generate_prediction(data):
     if getattr(data, "bmi", None) is not None:
 
         if data.bmi >= 30:
-            risk_score += 20
+            raw_risk_score += 20
 
             disease_scores["Obesity"] += 40
             disease_scores["Diabetes"] += 20
@@ -101,7 +101,7 @@ def generate_prediction(data):
             )
 
         elif data.bmi >= 25:
-            risk_score += 10
+            raw_risk_score += 10
 
     # =====================================
     # SMOKING
@@ -109,7 +109,7 @@ def generate_prediction(data):
 
     if getattr(data, "smoker", False):
 
-        risk_score += 20
+        raw_risk_score += 20
 
         disease_scores["Cardiovascular Disease"] += 30
         disease_scores["Hypertension"] += 15
@@ -124,7 +124,7 @@ def generate_prediction(data):
 
     if getattr(data, "alcohol_use", False):
 
-        risk_score += 10
+        raw_risk_score += 10
 
         disease_scores["Hypertension"] += 10
 
@@ -139,7 +139,7 @@ def generate_prediction(data):
     if getattr(data, "diet_quality", None) is not None:
 
         if data.diet_quality < 5:
-            risk_score += 15
+            raw_risk_score += 15
 
             disease_scores["Diabetes"] += 15
             disease_scores["Obesity"] += 15
@@ -155,7 +155,7 @@ def generate_prediction(data):
     if getattr(data, "water_intake_liters", None) is not None:
 
         if data.water_intake_liters < 1.5:
-            risk_score += 5
+            raw_risk_score += 5
 
             explanations.append(
                 "Low hydration may negatively affect health."
@@ -168,7 +168,7 @@ def generate_prediction(data):
     if getattr(data, "screen_time_hours", None) is not None:
 
         if data.screen_time_hours > 8:
-            risk_score += 10
+            raw_risk_score += 10
 
             disease_scores["Stress Related Disorder"] += 10
 
@@ -183,7 +183,7 @@ def generate_prediction(data):
     if getattr(data, "age", None) is not None:
 
         if data.age >= 60:
-            risk_score += 10
+            raw_risk_score += 10
 
             disease_scores["Hypertension"] += 10
             disease_scores["Cardiovascular Disease"] += 10
@@ -199,15 +199,11 @@ def generate_prediction(data):
         for symptom in symptoms
     )
 
-    # Diabetes
-
     if (
         "frequent urination" in symptoms_text
         or "excessive thirst" in symptoms_text
     ):
         disease_scores["Diabetes"] += 35
-
-    # Cardiovascular
 
     if (
         "chest pain" in symptoms_text
@@ -215,15 +211,11 @@ def generate_prediction(data):
     ):
         disease_scores["Cardiovascular Disease"] += 40
 
-    # Stress
-
     if (
         "fatigue" in symptoms_text
         and getattr(data, "stress_level", 0) >= 8
     ):
         disease_scores["Stress Related Disorder"] += 30
-
-    # Sleep
 
     if (
         "insomnia" in symptoms_text
@@ -232,44 +224,90 @@ def generate_prediction(data):
         disease_scores["Sleep Disorder"] += 30
 
     # =====================================
-    # FINAL SCORE CALCULATION
+    # SCORE NORMALIZATION
     # =====================================
 
-    risk_score = min(risk_score, 100)
+    MAX_RAW_RISK = 135
 
-    health_score = max(
-        0,
-        100 - risk_score
+    risk_score = round(
+        (raw_risk_score / MAX_RAW_RISK) * 100,
+        2
     )
+
+    risk_score = min(
+        95,
+        max(5, risk_score)
+    )
+
+    health_score = round(
+        100 - risk_score,
+        2
+    )
+
+    # =====================================
+    # PREDICTION
+    # =====================================
 
     predicted_disease = max(
         disease_scores,
         key=disease_scores.get
     )
 
-    highest_score = max(
+    # =====================================
+    # NORMALIZED PROBABILITIES
+    # =====================================
+
+    total_score = sum(
         disease_scores.values()
     )
 
-    ai_confidence = min(
-        95,
-        max(60, highest_score)
-    )
+    if total_score > 0:
+
+        disease_probabilities = {
+            disease: round(
+                (score / total_score) * 100,
+                2
+            )
+            for disease, score in disease_scores.items()
+        }
+
+        highest_score = max(
+            disease_scores.values()
+        )
+
+        ai_confidence = round(
+            min(
+                95,
+                50 + (
+                    highest_score / total_score
+                ) * 50
+            ),
+            2
+        )
+
+    else:
+
+        disease_probabilities = {
+            disease: 0
+            for disease in disease_scores
+        }
+
+        ai_confidence = 50
 
     # =====================================
     # RISK LEVEL
     # =====================================
 
-    if risk_score < 20:
+    if risk_score < 25:
         risk_level = "Low"
 
-    elif risk_score < 40:
+    elif risk_score < 45:
         risk_level = "Mild"
 
-    elif risk_score < 60:
+    elif risk_score < 65:
         risk_level = "Moderate"
 
-    elif risk_score < 80:
+    elif risk_score < 85:
         risk_level = "High"
 
     else:
@@ -281,9 +319,7 @@ def generate_prediction(data):
 
     phenotype = "Prevention Opportunity Profile"
 
-    if (
-        getattr(data, "stress_level", 0) >= 8
-    ):
+    if getattr(data, "stress_level", 0) >= 8:
         phenotype = (
             "Emotionally Overwhelmed Profile"
         )
@@ -297,56 +333,61 @@ def generate_prediction(data):
         )
 
     # =====================================
-    # NORMALIZED PROBABILITIES
+    # PERSONALIZED RECOMMENDATIONS
     # =====================================
 
-    total = sum(disease_scores.values())
+    recommendations = []
 
-    if total > 0:
+    if getattr(data, "sleep_hours", 8) < 6:
+        recommendations.append(
+            "Improve sleep duration and quality."
+        )
 
-        disease_probabilities = {
-            disease: round(
-                (score / total) * 100,
-                2
-            )
-            for disease, score in disease_scores.items()
-        }
+    if getattr(data, "stress_level", 0) >= 7:
+        recommendations.append(
+            "Practice stress management techniques."
+        )
 
-    else:
+    if getattr(data, "exercise_minutes", 100) < 30:
+        recommendations.append(
+            "Increase daily physical activity."
+        )
 
-        disease_probabilities = {
-            disease: 0
-            for disease in disease_scores
-        }
+    if getattr(data, "diet_quality", 10) < 5:
+        recommendations.append(
+            "Adopt a healthier and more balanced diet."
+        )
 
-    # =====================================
-    # RECOMMENDATION ENGINE
-    # =====================================
+    if getattr(data, "smoker", False):
+        recommendations.append(
+            "Consider smoking cessation support."
+        )
 
-    recommendation = (
-        "Improve sleep quality, increase physical activity, "
-        "maintain a healthy diet, reduce stress levels, "
-        "avoid smoking, limit alcohol consumption, "
-        "and seek professional medical evaluation if symptoms persist."
-    )
+    if getattr(data, "alcohol_use", False):
+        recommendations.append(
+            "Reduce alcohol consumption."
+        )
+
+    if getattr(data, "water_intake_liters", 3) < 1.5:
+        recommendations.append(
+            "Increase daily water intake."
+        )
+
+    if not recommendations:
+        recommendations.append(
+            "Maintain current healthy lifestyle habits."
+        )
+
+    recommendation = " ".join(recommendations)
 
     # =====================================
     # RETURN RESULT
     # =====================================
 
     return {
-        "health_score": round(
-            health_score,
-            2
-        ),
-        "risk_score": round(
-            risk_score,
-            2
-        ),
-        "ai_confidence": round(
-            ai_confidence,
-            2
-        ),
+        "health_score": health_score,
+        "risk_score": risk_score,
+        "ai_confidence": ai_confidence,
         "predicted_disease": predicted_disease,
         "risk_level": risk_level,
         "urgency": (
