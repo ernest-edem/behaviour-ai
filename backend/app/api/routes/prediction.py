@@ -13,21 +13,15 @@ from app.models.lifestyle_log import LifestyleLog
 
 from app.schemas.assessment import HealthAssessmentRequest
 
+from app.ml.observability.prediction_logger import PredictionLogger
+
 from app.services.async_prediction_service import AsyncPredictionService
-from app.services.prediction_history_service import (
-    get_user_prediction_history,
-)
-from app.services.alert_service import (
-    generate_alerts_from_prediction,
-)
+from app.services.prediction_history_service import get_user_prediction_history
+from app.services.alert_service import generate_alerts_from_prediction
 
-from app.ml.inference.prediction_orchestrator import (
-    PredictionOrchestrator,
-)
+from app.ml.inference.prediction_orchestrator import PredictionOrchestrator
+from app.services.prediction_service import generate_prediction
 
-from app.services.prediction_service import (
-    generate_prediction,
-)
 
 router = APIRouter(
     prefix="/predictions",
@@ -48,11 +42,7 @@ def get_prediction_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-
-    predictions = get_user_prediction_history(
-        db,
-        current_user.id,
-    )
+    predictions = get_user_prediction_history(db, current_user.id)
 
     return {
         "history": predictions,
@@ -72,78 +62,44 @@ def analyze_health(
 ):
 
     try:
-
         # =================================================
         # ORCHESTRATOR FIRST
         # =================================================
-
         try:
             result = orchestrator.predict(payload)
-
         except Exception:
             result = generate_prediction(payload)
 
         # =================================================
+        # FEATURE VECTOR GUARANTEE
+        # =================================================
+        feature_vector = result.get("feature_vector", {})
+        if not isinstance(feature_vector, dict):
+            feature_vector = {}
+        result["feature_vector"] = feature_vector
+
+        # =================================================
         # NORMALIZATION
         # =================================================
+        predicted_disease = result.get("predicted_disease", "")
+        predicted_condition = result.get("predicted_condition", predicted_disease)
 
-        predicted_disease = result.get(
-            "predicted_disease",
-            "",
-        )
+        ai_confidence = float(result.get("ai_confidence", 0))
+        confidence_score = float(result.get("confidence_score", ai_confidence))
 
-        predicted_condition = result.get(
-            "predicted_condition",
-            predicted_disease,
-        )
+        model_version = result.get("model_version", DEFAULT_MODEL_VERSION)
 
-        ai_confidence = float(
-            result.get(
-                "ai_confidence",
-                0,
-            )
-        )
-
-        confidence_score = float(
-            result.get(
-                "confidence_score",
-                ai_confidence,
-            )
-        )
-
-        model_version = result.get(
-            "model_version",
-            DEFAULT_MODEL_VERSION,
-        )
-
-        explanations = result.get(
-            "explanation",
-            result.get(
-                "explanations",
-                [],
-            ),
-        )
-
+        explanations = result.get("explanation", result.get("explanations", []))
         if explanations is None:
             explanations = []
 
-        recommendation = result.get(
-            "recommendation"
-        )
-
-        if recommendation is None:
-            recommendation = ""
-
+        recommendation = result.get("recommendation") or ""
         if isinstance(recommendation, list):
-            recommendation = " ".join(
-                str(x)
-                for x in recommendation
-            )
+            recommendation = " ".join(str(x) for x in recommendation)
 
         # =================================================
         # LIFESTYLE LOG
         # =================================================
-
         lifestyle = LifestyleLog(
             user_id=current_user.id,
             sleep_hours=payload.sleep_hours,
@@ -165,76 +121,42 @@ def analyze_health(
         # =================================================
         # PREDICTION RECORD
         # =================================================
-
         prediction = Prediction(
             user_id=current_user.id,
-
-            # Canonical
             predicted_condition=predicted_condition,
             confidence_score=confidence_score,
 
-            # Legacy
             predicted_disease=predicted_disease,
             ai_confidence=ai_confidence,
 
-            # Scores
             health_score=result["health_score"],
             risk_score=result["risk_score"],
             risk_level=result["risk_level"],
             urgency=result["urgency"],
 
-            # Behavioral
-            behavioral_phenotype=result.get(
-                "behavioral_phenotype"
-            ),
+            behavioral_phenotype=result.get("behavioral_phenotype"),
 
-            # Output
             recommendation=recommendation,
+            explanation="\n".join(explanations),
 
-            explanation="\n".join(
-                explanations
-            ),
+            disease_probabilities=result.get("disease_probabilities"),
+            shap_values=result.get("shap_values"),
+            feature_contributions=result.get("feature_contributions"),
 
-            # Explainability
-            disease_probabilities=result.get(
-                "disease_probabilities"
-            ),
+            prediction_source=result.get("prediction_source", "rule_engine"),
 
-            shap_values=result.get(
-                "shap_values"
-            ),
-
-            feature_contributions=result.get(
-                "feature_contributions"
-            ),
-
-            # Metadata
-            prediction_source=result.get(
-                "prediction_source",
-                "rule_engine",
-            ),
-
-            model_name=result.get(
-                "model_name"
-            ),
-
-            model_type=result.get(
-                "model_type"
-            ),
-
+            model_name=result.get("model_name"),
+            model_type=result.get("model_type"),
             model_version=model_version,
         )
 
         db.add(prediction)
-
         db.flush()
 
         # =================================================
         # SYMPTOMS
         # =================================================
-
         for symptom in payload.symptoms:
-
             db.add(
                 PredictionSymptom(
                     prediction_id=prediction.id,
@@ -245,7 +167,6 @@ def analyze_health(
         # =================================================
         # DISEASE HISTORY
         # =================================================
-
         db.add(
             DiseaseRiskHistory(
                 user_id=current_user.id,
@@ -259,7 +180,6 @@ def analyze_health(
         # =================================================
         # ALERTS
         # =================================================
-
         alerts = generate_alerts_from_prediction(
             user_id=current_user.id,
             result=result,
@@ -271,14 +191,23 @@ def analyze_health(
         # =================================================
         # COMMIT
         # =================================================
-
         db.commit()
 
-        db.refresh(prediction)
+        # =================================================
+        # AUDIT LOG (FIXED & SINGLE SOURCE OF TRUTH)
+        # =================================================
+        audit_record = PredictionLogger.log(
+            user_id=current_user.id,
+            input_data=payload.dict(),
+            feature_vector=feature_vector,
+            result=result,
+            model_version=model_version,
+            prediction_source=result.get("prediction_source", "rule_engine"),
+        )
 
-        # =================================================
-        # RESPONSE
-        # =================================================
+        print("[ML_AUDIT]", audit_record)
+
+        db.refresh(prediction)
 
         return {
             **result,
@@ -288,18 +217,14 @@ def analyze_health(
         }
 
     except SQLAlchemyError as exc:
-
         db.rollback()
-
         raise HTTPException(
             status_code=500,
             detail=f"Database error: {str(exc)}",
         )
 
     except Exception as exc:
-
         db.rollback()
-
         raise HTTPException(
             status_code=500,
             detail=f"Prediction failed: {str(exc)}",

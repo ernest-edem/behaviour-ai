@@ -6,16 +6,15 @@ from typing import Any, Dict, List, Optional
 @dataclass(slots=True)
 class PredictionResultDTO:
     """
-    Canonical prediction object used throughout the
-    BehaviorLens AI prediction pipeline.
+    Canonical prediction object.
 
-    Used by:
+    Single source of truth across:
+
     - Rule Engine
-    - PredictionPipeline
-    - PredictionOrchestrator
-    - Model Adapters
-    - FastAPI Routers
-    - Future SHAP Explainability Engine
+    - ML Pipeline
+    - Orchestrator
+    - Explainability
+    - API Layer
     """
 
     # ==================================================
@@ -30,18 +29,22 @@ class PredictionResultDTO:
 
     predicted_disease: str = ""
 
+    predicted_condition: str = ""
+
     health_score: float = 0.0
 
     risk_score: float = 0.0
 
     ai_confidence: float = 0.0
 
+    confidence_score: float = 0.0
+
     risk_level: str = "Low"
 
     urgency: str = "Low"
 
     # ==================================================
-    # BEHAVIORAL ANALYTICS
+    # BEHAVIORAL
     # ==================================================
 
     behavioral_phenotype: Optional[str] = None
@@ -71,16 +74,18 @@ class PredictionResultDTO:
     )
 
     # ==================================================
-    # FUTURE EXPLAINABILITY
+    # EXPLAINABILITY
     # ==================================================
 
     feature_contributions: Dict[str, float] = field(
         default_factory=dict
     )
 
-    shap_values: Dict[str, float] = field(
-        default_factory=dict
+    shap_values: List[float] = field(
+        default_factory=list
     )
+
+    shap_base_value: float = 0.0
 
     # ==================================================
     # MODEL METADATA
@@ -107,17 +112,10 @@ class PredictionResultDTO:
     # ==================================================
 
     def to_dict(self) -> Dict[str, Any]:
-        """
-        Canonical API payload.
-        """
 
         return asdict(self)
 
     def to_legacy_dict(self) -> Dict[str, Any]:
-        """
-        Legacy payload used by existing frontend
-        during migration.
-        """
 
         return {
             **self.to_dict(),
@@ -125,11 +123,14 @@ class PredictionResultDTO:
             "predicted_disease":
                 self.predicted_disease,
 
+            "predicted_condition":
+                self.predicted_condition,
+
             "ai_confidence":
-                round(
-                    self.ai_confidence,
-                    2
-                ),
+                round(self.ai_confidence, 2),
+
+            "confidence_score":
+                round(self.confidence_score, 2),
 
             "explanation":
                 self.explanations,
@@ -140,6 +141,10 @@ class PredictionResultDTO:
                 else "",
         }
 
+    # ==================================================
+    # FACTORY
+    # ==================================================
+
     @classmethod
     def from_rule_engine(
         cls,
@@ -148,41 +153,65 @@ class PredictionResultDTO:
             Dict[str, float]
         ] = None,
     ) -> "PredictionResultDTO":
-        """
-        Convert legacy rule engine output
-        into the canonical DTO.
-        """
+
+        confidence = float(
+            result.get(
+                "ai_confidence",
+                0.0,
+            )
+        )
+
+        explanations = result.get(
+            "explanations"
+        )
+
+        if explanations is None:
+
+            explanation = result.get(
+                "explanation"
+            )
+
+            if isinstance(explanation, str):
+                explanations = [explanation]
+            elif isinstance(explanation, list):
+                explanations = explanation
+            else:
+                explanations = []
+
+        predicted_disease = result.get(
+            "predicted_disease",
+            "",
+        )
 
         return cls(
+
             prediction_id=result.get(
                 "prediction_id"
             ),
 
-            predicted_disease=result.get(
-                "predicted_disease",
+            predicted_disease=
+                predicted_disease,
+
+            predicted_condition=
+                predicted_disease,
+
+            health_score=float(
                 result.get(
-                    "predicted_disease",
-                    ""
-                ),
-            ),
-
-            health_score=result.get(
-                "health_score",
-                0.0,
-            ),
-
-            risk_score=result.get(
-                "risk_score",
-                0.0,
-            ),
-
-            ai_confidence=result.get(
-                "ai_confidence",
-                result.get(
-                    "ai_confidence",
+                    "health_score",
                     0.0,
-                ) / 100,
+                )
             ),
+
+            risk_score=float(
+                result.get(
+                    "risk_score",
+                    0.0,
+                )
+            ),
+
+            ai_confidence=confidence,
+
+            confidence_score=confidence,
 
             risk_level=result.get(
                 "risk_level",
@@ -206,7 +235,7 @@ class PredictionResultDTO:
             recommendations=[
                 result.get(
                     "recommendation",
-                    ""
+                    "",
                 )
             ]
             if result.get(
@@ -214,16 +243,26 @@ class PredictionResultDTO:
             )
             else [],
 
-            explanations=result.get(
-                "explanations",
-                result.get(
-                    "explanation",
-                    [],
-                ),
+            explanations=explanations,
+
+            feature_vector=feature_vector or {},
+
+            feature_contributions=result.get(
+                "feature_contributions",
+                {},
             ),
 
-            feature_vector=feature_vector
-            or {},
+            shap_values=result.get(
+                "shap_values",
+                [],
+            ),
+
+            shap_base_value=float(
+                result.get(
+                    "shap_base_value",
+                    0.0,
+                )
+            ),
 
             prediction_source=result.get(
                 "prediction_source",

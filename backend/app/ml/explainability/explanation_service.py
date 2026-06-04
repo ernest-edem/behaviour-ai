@@ -1,6 +1,6 @@
 from typing import Dict, Any
 
-from app.ml.feature_engineering.feature_builder import FeatureBuilder
+from app.ml.features.feature_builder import FeatureBuilder
 from app.ml.explainability.shap_engine import SHAPEngine
 
 

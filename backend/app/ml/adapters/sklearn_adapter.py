@@ -15,11 +15,11 @@ class SklearnAdapter(BaseModelInterface):
     Generic Scikit-Learn adapter.
 
     Supports:
-
     - LogisticRegression
     - RandomForestClassifier
     - GradientBoostingClassifier
     - ExtraTreesClassifier
+    - XGBoost sklearn wrapper
     - Any sklearn-compatible estimator
     """
 
@@ -27,18 +27,24 @@ class SklearnAdapter(BaseModelInterface):
         self,
         model_name: str = "sklearn_model",
         version: str = "1.0.0",
-    ):
+    ) -> None:
+
         self._model: Optional[Any] = None
 
         self.model_name = model_name
         self.version = version
 
-    def load_model(self, path: str) -> None:
-        """
-        Load serialized sklearn model.
-        """
+    # ==================================================
+    # MODEL LOADING
+    # ==================================================
+
+    def load_model(
+        self,
+        path: str,
+    ) -> None:
 
         try:
+
             model_path = Path(path)
 
             if not model_path.exists():
@@ -53,10 +59,14 @@ class SklearnAdapter(BaseModelInterface):
                 f"Failed to load model: {exc}"
             ) from exc
 
-    def predict(self, features: Any) -> Any:
-        """
-        Return primary prediction.
-        """
+    # ==================================================
+    # INFERENCE
+    # ==================================================
+
+    def predict(
+        self,
+        features: Any,
+    ) -> Any:
 
         if self._model is None:
             raise PredictionError(
@@ -64,7 +74,10 @@ class SklearnAdapter(BaseModelInterface):
             )
 
         try:
-            prediction = self._model.predict(features)
+
+            prediction = self._model.predict(
+                features
+            )
 
             return prediction[0]
 
@@ -77,21 +90,31 @@ class SklearnAdapter(BaseModelInterface):
         self,
         features: Any,
     ) -> Dict[str, float]:
-        """
-        Return class probabilities.
-        """
 
         if self._model is None:
             raise PredictionError(
                 "Model not loaded."
             )
 
-        try:
-            probabilities = self._model.predict_proba(
-                features
-            )[0]
+        if not hasattr(
+            self._model,
+            "predict_proba",
+        ):
+            return {}
 
-            classes = self._model.classes_
+        try:
+
+            probabilities = (
+                self._model.predict_proba(
+                    features
+                )[0]
+            )
+
+            classes = getattr(
+                self._model,
+                "classes_",
+                [],
+            )
 
             return {
                 str(label): float(prob)
@@ -106,26 +129,62 @@ class SklearnAdapter(BaseModelInterface):
                 f"Probability prediction failed: {exc}"
             ) from exc
 
-    def get_estimator(self) -> Any:
+    # ==================================================
+    # MODEL ACCESS
+    # ==================================================
+
+    @property
+    def model(
+        self,
+    ) -> Optional[Any]:
         """
-        Required for SHAP.
+        SHAP-compatible access.
+
+        Allows:
+            adapter.model
         """
 
         return self._model
 
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_estimator(
+        self,
+    ) -> Any:
         """
-        Runtime model metadata.
+        Explicit estimator access.
+
+        Used by:
+        - SHAP
+        - Explainability
+        - Validation
         """
+
+        return self._model
+
+    def is_loaded(
+        self,
+    ) -> bool:
+
+        return self._model is not None
+
+    # ==================================================
+    # METADATA
+    # ==================================================
+
+    def get_metadata(
+        self,
+    ) -> Dict[str, Any]:
 
         algorithm = None
 
         if self._model is not None:
-            algorithm = self._model.__class__.__name__
+            algorithm = (
+                self._model.__class__.__name__
+            )
 
         return {
             "name": self.model_name,
             "version": self.version,
             "framework": "scikit-learn",
             "algorithm": algorithm,
+            "loaded": self.is_loaded(),
         }

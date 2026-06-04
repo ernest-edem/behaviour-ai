@@ -232,3 +232,9 @@ class ModelRegistry:
 # ==================================================
 
 model_registry = ModelRegistry()
+
+def safe_get_active_model(self):
+    try:
+        return self.get_active_model()
+    except Exception:
+        return None
