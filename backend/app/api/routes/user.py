@@ -86,7 +86,16 @@ def login(
         max_age=3600 * 24 * 7 # 7 days
     )
 
-    return {"message": "Successfully logged in"}
+    # Serialize user model safely using UserResponse schema
+    user_schema = UserResponse.model_validate(result["user"])
+
+    return {
+        "message": "Successfully logged in",
+        "access_token": result["access_token"],
+        "token_type": result["token_type"],
+        "user": user_schema
+    }
+
 
 @router.post("/logout")
 def logout(response: Response):

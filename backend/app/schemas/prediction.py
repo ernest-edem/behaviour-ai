@@ -1,13 +1,12 @@
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime
-from typing import List, Optional
-from datetime import datetime
-from pydantic import BaseModel
+from typing import Dict, List, Optional
 
-# =====================================
+from pydantic import BaseModel, ConfigDict
+
+
+# ==================================================
 # INPUT
-# =====================================
+# ==================================================
 
 class PredictionRequest(BaseModel):
     sleep_hours: float
@@ -28,66 +27,118 @@ class PredictionRequest(BaseModel):
     symptoms: List[str]
 
 
-# =====================================
-# OUTPUT
-# =====================================
+# ==================================================
+# CANONICAL PREDICTION RESPONSE
+# ==================================================
 
 class PredictionResponse(BaseModel):
-    health_score: float
+    prediction_id: Optional[int] = None
 
+    health_score: float
     risk_score: float
 
     ai_confidence: float
-
     predicted_disease: str
 
     risk_level: str
-
     urgency: str
 
-    explanation: List[str]
+    behavioral_phenotype: Optional[str] = None
+
+    disease_probabilities: Dict[str, float]
+
+    explanations: List[str]
 
     recommendation: str
 
+    prediction_source: str
+    model_version: Optional[str] = None
 
-# =====================================
-# HISTORY
-# =====================================
+    # ----------------------------------------------
+    # Backward compatibility
+    # ----------------------------------------------
 
-class PredictionHistoryResponse(BaseModel):
-    id: int
+    ai_confidence: Optional[float] = None
+    predicted_disease: Optional[str] = None
+    explanation: Optional[List[str]] = None
 
-    predicted_disease: str
 
-    health_score: float
-
-    risk_score: float
-
-    ai_confidence: float
-
-    risk_level: str
-
-    urgency: str
-
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
+# ==================================================
+# HISTORY ITEM
+# ==================================================
 
 class PredictionHistoryItem(BaseModel):
     id: int
+
+    predicted_disease: Optional[str] = None
+    ai_confidence: Optional[float] = None
+
     predicted_disease: str
+    ai_confidence: float
+
     health_score: float
     risk_score: float
-    ai_confidence: float
+
     risk_level: str
     urgency: str
+
+    model_version: Optional[str] = None
+    prediction_source: Optional[str] = None
+
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
+
+# ==================================================
+# HISTORY RESPONSE
+# ==================================================
 
 class PredictionHistoryResponse(BaseModel):
     history: List[PredictionHistoryItem]
     total: int
+
+
+# ==================================================
+# DATABASE SERIALIZATION
+# ==================================================
+
+class PredictionDBResponse(BaseModel):
+    id: int
+
+    user_id: int
+
+    predicted_disease: Optional[str] = None
+    ai_confidence: Optional[float] = None
+
+    predicted_disease: str
+    ai_confidence: float
+
+    health_score: float
+    risk_score: float
+
+    risk_level: str
+    urgency: str
+
+    behavioral_phenotype: Optional[str] = None
+
+    disease_probabilities: Optional[
+        Dict[str, float]
+    ] = None
+
+    recommendation: Optional[str] = None
+    explanation: Optional[str] = None
+
+    prediction_source: Optional[str] = None
+
+    model_name: Optional[str] = None
+    model_type: Optional[str] = None
+    model_version: Optional[str] = None
+
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )

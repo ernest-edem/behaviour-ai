@@ -1,22 +1,17 @@
-from typing import Dict
+from typing import Any, Dict, List
 
 
-def generate_prediction(data):
+def generate_prediction(data: Any) -> Dict[str, Any]:
     """
     BehaviorLens AI Rule-Based Prediction Engine
 
-    This serves as:
-    - Baseline prediction engine
-    - Fallback engine when ML model unavailable
-    - Explainability layer
+    Baseline prediction engine
+    Fallback prediction engine
+    Explainability fallback
     """
 
     raw_risk_score = 0
-    explanations = []
-
-    # =====================================
-    # DISEASE SCORES
-    # =====================================
+    explanations: List[str] = []
 
     disease_scores = {
         "Diabetes": 0,
@@ -25,12 +20,12 @@ def generate_prediction(data):
         "Cardiovascular Disease": 0,
         "Stress Related Disorder": 0,
         "Sleep Disorder": 0,
-        "General Health Risk": 0
+        "General Health Risk": 0,
     }
 
-    # =====================================
-    # SLEEP ANALYSIS
-    # =====================================
+    # ==================================================
+    # SLEEP
+    # ==================================================
 
     if getattr(data, "sleep_hours", None) is not None:
 
@@ -47,13 +42,14 @@ def generate_prediction(data):
         elif data.sleep_hours < 7:
             raw_risk_score += 10
 
-    # =====================================
-    # STRESS ANALYSIS
-    # =====================================
+    # ==================================================
+    # STRESS
+    # ==================================================
 
     if getattr(data, "stress_level", None) is not None:
 
         if data.stress_level >= 8:
+
             raw_risk_score += 20
 
             disease_scores["Stress Related Disorder"] += 40
@@ -67,13 +63,14 @@ def generate_prediction(data):
         elif data.stress_level >= 6:
             raw_risk_score += 10
 
-    # =====================================
-    # PHYSICAL ACTIVITY
-    # =====================================
+    # ==================================================
+    # EXERCISE
+    # ==================================================
 
     if getattr(data, "exercise_minutes", None) is not None:
 
         if data.exercise_minutes < 30:
+
             raw_risk_score += 15
 
             disease_scores["Obesity"] += 20
@@ -83,13 +80,14 @@ def generate_prediction(data):
                 "Low physical activity contributed to risk."
             )
 
-    # =====================================
-    # BMI ANALYSIS
-    # =====================================
+    # ==================================================
+    # BMI
+    # ==================================================
 
     if getattr(data, "bmi", None) is not None:
 
         if data.bmi >= 30:
+
             raw_risk_score += 20
 
             disease_scores["Obesity"] += 40
@@ -103,9 +101,9 @@ def generate_prediction(data):
         elif data.bmi >= 25:
             raw_risk_score += 10
 
-    # =====================================
+    # ==================================================
     # SMOKING
-    # =====================================
+    # ==================================================
 
     if getattr(data, "smoker", False):
 
@@ -118,9 +116,9 @@ def generate_prediction(data):
             "Smoking behavior increased cardiovascular risk."
         )
 
-    # =====================================
+    # ==================================================
     # ALCOHOL
-    # =====================================
+    # ==================================================
 
     if getattr(data, "alcohol_use", False):
 
@@ -132,13 +130,14 @@ def generate_prediction(data):
             "Alcohol use contributed to health risk."
         )
 
-    # =====================================
-    # DIET QUALITY
-    # =====================================
+    # ==================================================
+    # DIET
+    # ==================================================
 
     if getattr(data, "diet_quality", None) is not None:
 
         if data.diet_quality < 5:
+
             raw_risk_score += 15
 
             disease_scores["Diabetes"] += 15
@@ -148,26 +147,28 @@ def generate_prediction(data):
                 "Poor diet quality increased disease risk."
             )
 
-    # =====================================
+    # ==================================================
     # HYDRATION
-    # =====================================
+    # ==================================================
 
     if getattr(data, "water_intake_liters", None) is not None:
 
         if data.water_intake_liters < 1.5:
+
             raw_risk_score += 5
 
             explanations.append(
                 "Low hydration may negatively affect health."
             )
 
-    # =====================================
+    # ==================================================
     # SCREEN TIME
-    # =====================================
+    # ==================================================
 
     if getattr(data, "screen_time_hours", None) is not None:
 
         if data.screen_time_hours > 8:
+
             raw_risk_score += 10
 
             disease_scores["Stress Related Disorder"] += 10
@@ -176,21 +177,22 @@ def generate_prediction(data):
                 "Excessive screen time may impact wellbeing."
             )
 
-    # =====================================
-    # AGE FACTOR
-    # =====================================
+    # ==================================================
+    # AGE
+    # ==================================================
 
     if getattr(data, "age", None) is not None:
 
         if data.age >= 60:
+
             raw_risk_score += 10
 
             disease_scores["Hypertension"] += 10
             disease_scores["Cardiovascular Disease"] += 10
 
-    # =====================================
-    # SYMPTOM ANALYSIS
-    # =====================================
+    # ==================================================
+    # SYMPTOMS
+    # ==================================================
 
     symptoms = getattr(data, "symptoms", [])
 
@@ -223,39 +225,39 @@ def generate_prediction(data):
     ):
         disease_scores["Sleep Disorder"] += 30
 
-    # =====================================
+    # ==================================================
     # SCORE NORMALIZATION
-    # =====================================
+    # ==================================================
 
     MAX_RAW_RISK = 135
 
     risk_score = round(
         (raw_risk_score / MAX_RAW_RISK) * 100,
-        2
+        2,
     )
 
     risk_score = min(
         95,
-        max(5, risk_score)
+        max(5, risk_score),
     )
 
     health_score = round(
         100 - risk_score,
-        2
+        2,
     )
 
-    # =====================================
+    # ==================================================
     # PREDICTION
-    # =====================================
+    # ==================================================
 
     predicted_disease = max(
         disease_scores,
-        key=disease_scores.get
+        key=disease_scores.get,
     )
 
-    # =====================================
-    # NORMALIZED PROBABILITIES
-    # =====================================
+    # ==================================================
+    # PROBABILITIES
+    # ==================================================
 
     total_score = sum(
         disease_scores.values()
@@ -265,8 +267,8 @@ def generate_prediction(data):
 
         disease_probabilities = {
             disease: round(
-                (score / total_score) * 100,
-                2
+                score / total_score,
+                4,
             )
             for disease, score in disease_scores.items()
         }
@@ -275,28 +277,28 @@ def generate_prediction(data):
             disease_scores.values()
         )
 
-        ai_confidence = round(
+        confidence_score = round(
             min(
-                95,
-                50 + (
+                0.95,
+                0.50 + (
                     highest_score / total_score
-                ) * 50
+                ) * 0.50,
             ),
-            2
+            4,
         )
 
     else:
 
         disease_probabilities = {
-            disease: 0
+            disease: 0.0
             for disease in disease_scores
         }
 
-        ai_confidence = 50
+        confidence_score = 0.50
 
-    # =====================================
+    # ==================================================
     # RISK LEVEL
-    # =====================================
+    # ==================================================
 
     if risk_score < 25:
         risk_level = "Low"
@@ -313,28 +315,21 @@ def generate_prediction(data):
     else:
         risk_level = "Critical"
 
-    # =====================================
-    # BEHAVIORAL PHENOTYPE
-    # =====================================
+    # ==================================================
+    # PHENOTYPE
+    # ==================================================
 
     phenotype = "Prevention Opportunity Profile"
 
     if getattr(data, "stress_level", 0) >= 8:
-        phenotype = (
-            "Emotionally Overwhelmed Profile"
-        )
+        phenotype = "Emotionally Overwhelmed Profile"
 
-    if (
-        getattr(data, "exercise_minutes", 100) < 20
-        and getattr(data, "bmi", 0) >= 25
-    ):
-        phenotype = (
-            "High Cardiometabolic Risk Profile"
-        )
+    if getattr(data, "exercise_minutes", 100) < 20:
+        phenotype = "High Cardiometabolic Risk Profile"
 
-    # =====================================
-    # PERSONALIZED RECOMMENDATIONS
-    # =====================================
+    # ==================================================
+    # RECOMMENDATIONS
+    # ==================================================
 
     recommendations = []
 
@@ -380,23 +375,52 @@ def generate_prediction(data):
 
     recommendation = " ".join(recommendations)
 
-    # =====================================
-    # RETURN RESULT
-    # =====================================
+    # ==================================================
+    # RETURN
+    # ==================================================
 
     return {
+        "prediction_id": None,
+
+        "predicted_condition": predicted_disease,
+        "confidence_score": round(
+            confidence_score * 100,
+            2,
+        ),
+
+        "predicted_disease": predicted_disease,
+        "ai_confidence": round(
+            confidence_score * 100,
+            2,
+        ),
+
         "health_score": health_score,
         "risk_score": risk_score,
-        "ai_confidence": ai_confidence,
-        "predicted_disease": predicted_disease,
+
         "risk_level": risk_level,
+
         "urgency": (
             "High"
             if risk_level in ["High", "Critical"]
             else "Low"
         ),
+
         "behavioral_phenotype": phenotype,
+
         "disease_probabilities": disease_probabilities,
+
+        "recommendations": recommendations,
+        "recommendation": recommendation,
+
+        "explanations": explanations,
         "explanation": explanations,
-        "recommendation": recommendation
+
+        "prediction_source": "rule_engine",
+        "model_name": "BehaviorLens Rule Engine",
+        "model_type": "rule_based",
+        "model_version": "rule-engine-v1",
+
+        "feature_vector": {},
+        "feature_contributions": {},
+        "shap_values": {},
     }
